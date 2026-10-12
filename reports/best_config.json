@@ -1,0 +1,22 @@
+{
+  "hidden_units": [
+    256
+  ],
+  "dropout_rates": [
+    0.3
+  ],
+  "learning_rate": 0.0001,
+  "batch_size": 256,
+  "early_stopping_patience": 8,
+  "n_parameters": 204298,
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "val_accuracy_mean": 0.89185,
+  "val_accuracy_std": 0.00188,
+  "test_accuracy_mean": 0.8866,
+  "test_accuracy_std": 0.00165,
+  "quick_mode": false
+}

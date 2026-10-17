@@ -4,7 +4,7 @@
 
 **A fully connected network (no CNNs) for Fashion-MNIST, engineered to beat overfitting with Batch Normalization, Dropout, and Early Stopping.**
 
-[![CI](https://github.com/mohammedashraff25-code/DNN-Image-Classifier/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammedashraff25-code/DNN-Image-Classifier/actions/workflows/ci.yml)
+[![CI](https://github.com/mohammedashraaff25-code/DNN-Image-Classifier/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammedashraaff25-code/DNN-Image-Classifier/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15-FF6F00?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
 [![Keras](https://img.shields.io/badge/Keras-Sequential_API-D00000?logo=keras&logoColor=white)](https://keras.io/)
@@ -261,7 +261,7 @@ DNN-Image-Classifier/
 ### 1. Clone and set up the environment
 
 ```bash
-git clone https://github.com/mohammedashraff25-code/DNN-Image-Classifier.git
+git clone https://github.com/mohammedashraaff25-code/DNN-Image-Classifier.git
 cd DNN-Image-Classifier
 
 python3.11 -m venv venv
@@ -362,7 +362,7 @@ The tests use a small random stand-in for Fashion-MNIST, so they run offline and
 
 **Mohamed Ashraf**
 
-[![GitHub](https://img.shields.io/badge/GitHub-mohammedashraff25--code-181717?logo=github)](https://github.com/mohammedashraff25-code)
+[![GitHub](https://img.shields.io/badge/GitHub-mohammedashraaff25--code-181717?logo=github)](https://github.com/mohammedashraaff25-code)
 
 <!-- Add your LinkedIn / email here, for example:
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/your-profile)

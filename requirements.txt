@@ -1,23 +1,19 @@
-# Core ML
-tensorflow-macos==2.15.0
-tensorflow-metal==1.1.0
+# ---------- Deep learning ----------
+# Apple Silicon Macs use tensorflow-macos (+ the Metal GPU plugin);
+# every other platform (Linux, Windows, Intel Mac) uses the standard package.
+tensorflow-macos==2.15.0; sys_platform == "darwin" and platform_machine == "arm64"
+tensorflow-metal==1.1.0; sys_platform == "darwin" and platform_machine == "arm64"
+tensorflow==2.15.0; sys_platform != "darwin" or platform_machine != "arm64"
 numpy==1.26.4
 
-# Data & Visualization
+# ---------- Data and visualization ----------
 pandas==2.2.2
 matplotlib==3.8.4
 seaborn==0.13.2
 scikit-learn==1.4.2
+scipy==1.17.1
+pillow==12.3.0
 
-# Config & Utilities
-pyyaml==6.0.1
-tqdm==4.66.4
-
-# Notebooks
+# ---------- Notebooks ----------
 jupyterlab==4.2.0
 ipykernel==6.29.4
-
-# Dev tools
-pytest==8.2.0
-black==24.4.2
-ruff==0.4.4

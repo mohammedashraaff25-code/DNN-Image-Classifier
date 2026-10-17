@@ -34,72 +34,39 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from tensorflow import keras
 
-matplotlib.use("Agg")  # headless backend: figures are saved, never shown
-
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import seaborn as sns  # noqa: E402
-from sklearn.metrics import (  # noqa: E402
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-)
-from tensorflow import keras  # noqa: E402
-
-from src.data_loader import CLASS_NAMES, IMG_HEIGHT, IMG_WIDTH, NUM_CLASSES, load_data  # noqa: E402
+from src.config import BEST_MODEL_PATH, FIGURES_DIR, REPORTS_DIR
+from src.data_loader import CLASS_NAMES, IMG_HEIGHT, IMG_WIDTH, NUM_CLASSES, load_data
+from src.model import load_best_model
+from src.utils import save_figure, with_plot_style
 
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
-# Paths (relative to the project root, not to the current working directory)
+# Output file names (folders live in src.config)
 # --------------------------------------------------------------------------- #
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
-MODELS_DIR: Path = PROJECT_ROOT / "models"
-REPORTS_DIR: Path = PROJECT_ROOT / "reports"
-FIGURES_DIR: Path = REPORTS_DIR / "figures"
-
-BEST_MODEL_PATH: Path = MODELS_DIR / "best_model.keras"
-METRICS_JSON_PATH: Path = REPORTS_DIR / "evaluation_metrics.json"
-REPORT_TXT_PATH: Path = REPORTS_DIR / "classification_report.txt"
-REPORT_CSV_PATH: Path = REPORTS_DIR / "classification_report.csv"
-CM_COUNTS_PATH: Path = FIGURES_DIR / "08_confusion_matrix_counts.png"
-CM_NORMALIZED_PATH: Path = FIGURES_DIR / "09_confusion_matrix_normalized.png"
-PER_CLASS_PATH: Path = FIGURES_DIR / "10_per_class_metrics.png"
-MISCLASSIFIED_PATH: Path = FIGURES_DIR / "11_misclassified_examples.png"
+METRICS_JSON_NAME = "evaluation_metrics.json"
+REPORT_TXT_NAME = "classification_report.txt"
+REPORT_CSV_NAME = "classification_report.csv"
+CM_COUNTS_NAME = "08_confusion_matrix_counts.png"
+CM_NORMALIZED_NAME = "09_confusion_matrix_normalized.png"
+PER_CLASS_NAME = "10_per_class_metrics.png"
+MISCLASSIFIED_NAME = "11_misclassified_examples.png"
 
 
 # --------------------------------------------------------------------------- #
 # Loading and prediction
 # --------------------------------------------------------------------------- #
-def load_best_model(model_path: Path = BEST_MODEL_PATH) -> keras.Model:
-    """Load the saved best model from disk.
-
-    Args:
-        model_path: Path to the ``.keras`` model file.
-
-    Returns:
-        The loaded Keras model.
-
-    Raises:
-        FileNotFoundError: If the model file does not exist (train first).
-    """
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"No trained model found at {model_path}. "
-            "Run `python -m src.train` first."
-        )
-    logger.info("Loading model from %s", model_path)
-    return keras.models.load_model(model_path)
-
-
 def predict(
     model: keras.Model, x: np.ndarray, batch_size: int = 256
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Predict class probabilities and labels.
 
     Args:
@@ -117,9 +84,7 @@ def predict(
 # --------------------------------------------------------------------------- #
 # Metrics
 # --------------------------------------------------------------------------- #
-def compute_classification_report(
-    y_true: np.ndarray, y_pred: np.ndarray
-) -> Tuple[str, Dict]:
+def compute_classification_report(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[str, dict]:
     """Compute the per-class classification report.
 
     Args:
@@ -129,22 +94,20 @@ def compute_classification_report(
     Returns:
         A tuple ``(text_report, report_dict)``.
     """
-    kwargs = dict(
-        y_true=y_true,
-        y_pred=y_pred,
-        labels=list(range(NUM_CLASSES)),
-        target_names=CLASS_NAMES,
-        digits=4,
-        zero_division=0,
-    )
+    kwargs = {
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "labels": list(range(NUM_CLASSES)),
+        "target_names": CLASS_NAMES,
+        "digits": 4,
+        "zero_division": 0,
+    }
     text = classification_report(**kwargs)
     as_dict = classification_report(**kwargs, output_dict=True)
     return text, as_dict
 
 
-def find_top_confusions(
-    cm: np.ndarray, top_k: int = 5
-) -> List[Dict[str, object]]:
+def find_top_confusions(cm: np.ndarray, top_k: int = 5) -> list[dict[str, object]]:
     """Find the most frequent misclassification pairs.
 
     Args:
@@ -174,8 +137,9 @@ def find_top_confusions(
 # --------------------------------------------------------------------------- #
 # Plots
 # --------------------------------------------------------------------------- #
+@with_plot_style("white")
 def plot_confusion_matrix(
-    cm: np.ndarray, save_path: Path, normalize: bool = False, accuracy: float = None
+    cm: np.ndarray, save_path: Path, normalize: bool = False, accuracy: float | None = None
 ) -> None:
     """Plot and save a confusion matrix heatmap.
 
@@ -186,15 +150,12 @@ def plot_confusion_matrix(
             share of each true class (the diagonal is then the per-class recall).
         accuracy: Optional overall accuracy shown in the title.
     """
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
     if normalize:
         data = cm / cm.sum(axis=1, keepdims=True)
         fmt, cbar_label, kind = ".1%", "Share of true class", "normalized"
     else:
         data, fmt, cbar_label, kind = cm, "d", "Number of samples", "counts"
 
-    sns.set_theme(style="white", context="notebook")
     fig, ax = plt.subplots(figsize=(11, 9))
     sns.heatmap(
         data,
@@ -221,20 +182,17 @@ def plot_confusion_matrix(
     plt.setp(ax.get_yticklabels(), rotation=0)
 
     fig.tight_layout()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved %s", save_path)
+    save_figure(fig, save_path)
 
 
-def plot_per_class_metrics(report: Dict, save_path: Path) -> None:
+@with_plot_style("whitegrid")
+def plot_per_class_metrics(report: dict, save_path: Path) -> None:
     """Plot precision, recall and F1-score for every class.
 
     Args:
         report: Dictionary returned by ``classification_report(output_dict=True)``.
         save_path: Destination image path.
     """
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
     rows = [
         {"class": name, "metric": metric, "score": report[name][metric]}
         for name in CLASS_NAMES
@@ -242,7 +200,6 @@ def plot_per_class_metrics(report: Dict, save_path: Path) -> None:
     ]
     df = pd.DataFrame(rows)
 
-    sns.set_theme(style="whitegrid", context="notebook")
     fig, ax = plt.subplots(figsize=(13, 5.5))
     sns.barplot(data=df, x="class", y="score", hue="metric", palette="deep", ax=ax)
     ax.set_ylim(0.5, 1.02)
@@ -253,11 +210,10 @@ def plot_per_class_metrics(report: Dict, save_path: Path) -> None:
     plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
 
     fig.tight_layout()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved %s", save_path)
+    save_figure(fig, save_path)
 
 
+@with_plot_style("white")
 def plot_misclassified(
     x_test: np.ndarray,
     y_true: np.ndarray,
@@ -300,12 +256,10 @@ def plot_misclassified(
     n_cols = 5
     n_rows = int(np.ceil(n_examples / n_cols))
 
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    sns.set_theme(style="white")
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.6 * n_cols, 3.0 * n_rows))
     axes = np.atleast_1d(axes).ravel()
 
-    for ax, idx in zip(axes, chosen):
+    for ax, idx in zip(axes, chosen, strict=False):  # spare axes are hidden below
         ax.imshow(x_test[idx].reshape(IMG_HEIGHT, IMG_WIDTH), cmap="gray")
         confidence = probabilities[idx, y_pred[idx]]
         ax.set_title(
@@ -315,19 +269,16 @@ def plot_misclassified(
             color="firebrick",
         )
         ax.axis("off")
-    for ax in axes[len(chosen):]:
+    for ax in axes[len(chosen) :]:
         ax.axis("off")
 
     fig.suptitle(
-        f"Misclassified test examples ({subtitle}; "
-        f"{len(wrong_idx):,} errors in total)",
+        f"Misclassified test examples ({subtitle}; " f"{len(wrong_idx):,} errors in total)",
         fontsize=13,
         fontweight="bold",
     )
     fig.tight_layout()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved %s", save_path)
+    save_figure(fig, save_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -337,10 +288,11 @@ def save_results(
     test_loss: float,
     test_accuracy: float,
     report_text: str,
-    report_dict: Dict,
-    top_confusions: List[Dict[str, object]],
+    report_dict: dict,
+    top_confusions: list[dict[str, object]],
     n_test: int,
     n_errors: int,
+    reports_dir: Path = REPORTS_DIR,
 ) -> None:
     """Save metrics as JSON, the text report, and the per-class CSV table.
 
@@ -352,8 +304,9 @@ def save_results(
         top_confusions: Most frequent misclassification pairs.
         n_test: Number of test samples.
         n_errors: Number of misclassified test samples.
+        reports_dir: Folder where the report files are written.
     """
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    reports_dir.mkdir(parents=True, exist_ok=True)
 
     metrics = {
         "test_loss": round(test_loss, 6),
@@ -373,16 +326,13 @@ def save_results(
         },
         "top_confusions": top_confusions,
     }
-    METRICS_JSON_PATH.write_text(json.dumps(metrics, indent=2))
+    (reports_dir / METRICS_JSON_NAME).write_text(json.dumps(metrics, indent=2))
 
-    header = (
-        f"Test loss     : {test_loss:.4f}\n"
-        f"Test accuracy : {test_accuracy:.4f}\n\n"
-    )
-    REPORT_TXT_PATH.write_text(header + report_text)
+    header = f"Test loss     : {test_loss:.4f}\n" f"Test accuracy : {test_accuracy:.4f}\n\n"
+    (reports_dir / REPORT_TXT_NAME).write_text(header + report_text)
 
-    pd.DataFrame(report_dict).T.round(4).to_csv(REPORT_CSV_PATH, index_label="class")
-    logger.info("Saved metrics, text report and CSV table to %s", REPORTS_DIR)
+    pd.DataFrame(report_dict).T.round(4).to_csv(reports_dir / REPORT_CSV_NAME, index_label="class")
+    logger.info("Saved metrics, text report and CSV table to %s", reports_dir)
 
 
 # --------------------------------------------------------------------------- #
@@ -393,7 +343,8 @@ def run_evaluation(
     batch_size: int = 256,
     n_misclassified: int = 20,
     misclassified_mode: str = "confident",
-) -> Dict[str, float]:
+    reports_dir: Path = REPORTS_DIR,
+) -> dict[str, float]:
     """Run the complete evaluation pipeline.
 
     Args:
@@ -401,11 +352,13 @@ def run_evaluation(
         batch_size: Batch size for evaluation and prediction.
         n_misclassified: Number of misclassified examples to plot.
         misclassified_mode: ``"confident"`` or ``"random"``.
+        reports_dir: Folder for the reports; figures go to its ``figures/`` subfolder.
 
     Returns:
         A dictionary with ``test_loss`` and ``test_accuracy``.
     """
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    figures_dir = reports_dir / FIGURES_DIR.relative_to(REPORTS_DIR)
+    figures_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) Model and data ---------------------------------------------------- #
     print("\n[1/5] Loading model and test data...")
@@ -415,11 +368,16 @@ def run_evaluation(
 
     # 2) Loss and accuracy ------------------------------------------------- #
     print("\n[2/5] Evaluating on the test set...")
-    test_loss, test_accuracy = model.evaluate(
-        X_test, y_test, batch_size=batch_size, verbose=0
-    )
+    test_loss, test_accuracy = model.evaluate(X_test, y_test, batch_size=batch_size, verbose=0)
     y_pred, probabilities = predict(model, X_test, batch_size)
-    assert np.isclose(accuracy_score(y_test, y_pred), test_accuracy, atol=1e-4)
+    recomputed_accuracy = accuracy_score(y_test, y_pred)
+    if not np.isclose(recomputed_accuracy, test_accuracy, atol=1e-4):
+        logger.warning(
+            "Accuracy from model.evaluate (%.4f) differs from the accuracy recomputed "
+            "from predictions (%.4f).",
+            test_accuracy,
+            recomputed_accuracy,
+        )
 
     line = "=" * 60
     print(f"\n{line}\nTEST RESULTS\n{line}")
@@ -441,25 +399,38 @@ def run_evaluation(
 
     # 4) Figures ----------------------------------------------------------- #
     print("\n[4/5] Creating figures...")
-    plot_confusion_matrix(cm, CM_COUNTS_PATH, normalize=False, accuracy=test_accuracy)
-    plot_confusion_matrix(cm, CM_NORMALIZED_PATH, normalize=True, accuracy=test_accuracy)
-    plot_per_class_metrics(report_dict, PER_CLASS_PATH)
+    plot_confusion_matrix(cm, figures_dir / CM_COUNTS_NAME, normalize=False, accuracy=test_accuracy)
+    plot_confusion_matrix(
+        cm, figures_dir / CM_NORMALIZED_NAME, normalize=True, accuracy=test_accuracy
+    )
+    plot_per_class_metrics(report_dict, figures_dir / PER_CLASS_NAME)
     plot_misclassified(
-        X_test, y_test, y_pred, probabilities, MISCLASSIFIED_PATH,
-        n_examples=n_misclassified, mode=misclassified_mode,
+        X_test,
+        y_test,
+        y_pred,
+        probabilities,
+        figures_dir / MISCLASSIFIED_NAME,
+        n_examples=n_misclassified,
+        mode=misclassified_mode,
     )
 
     # 5) Save results ------------------------------------------------------ #
     print("\n[5/5] Saving results...")
     save_results(
-        float(test_loss), float(test_accuracy), report_text, report_dict,
-        top_confusions, n_test=len(y_test), n_errors=n_errors,
+        float(test_loss),
+        float(test_accuracy),
+        report_text,
+        report_dict,
+        top_confusions,
+        n_test=len(y_test),
+        n_errors=n_errors,
+        reports_dir=reports_dir,
     )
 
     print(f"\n{line}")
     print(f"Misclassified : {n_errors:,} of {len(y_test):,} test images")
-    print(f"Reports saved : {REPORTS_DIR}")
-    print(f"Figures saved : {FIGURES_DIR}")
+    print(f"Reports saved : {reports_dir}")
+    print(f"Figures saved : {figures_dir}")
     print(line)
 
     return {"test_loss": float(test_loss), "test_accuracy": float(test_accuracy)}
@@ -477,11 +448,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", type=Path, default=BEST_MODEL_PATH)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument(
-        "--n-misclassified", type=int, default=20,
+        "--n-misclassified",
+        type=int,
+        default=20,
         help="How many misclassified examples to plot.",
     )
     parser.add_argument(
-        "--misclassified-mode", choices=["confident", "random"], default="confident",
+        "--misclassified-mode",
+        choices=["confident", "random"],
+        default="confident",
         help="Show the most confident errors or a random sample.",
     )
     return parser.parse_args()
@@ -490,6 +465,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: parse arguments and run the evaluation."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+    plt.switch_backend("Agg")  # headless: figures are saved, never shown
     args = parse_args()
     run_evaluation(
         model_path=args.model_path,

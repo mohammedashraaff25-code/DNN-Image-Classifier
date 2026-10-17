@@ -26,7 +26,6 @@ Run a self-test from the project root with::
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -46,7 +45,7 @@ MAX_PIXEL_VALUE: float = 255.0
 DEFAULT_VAL_SPLIT: float = 0.15
 DEFAULT_SEED: int = 42
 
-CLASS_NAMES: List[str] = [
+CLASS_NAMES: list[str] = [
     "T-shirt/top",
     "Trouser",
     "Pullover",
@@ -60,15 +59,13 @@ CLASS_NAMES: List[str] = [
 ]
 
 # Type alias: (X_train, y_train, X_val, y_val, X_test, y_test)
-DataSplits = Tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
-]
+DataSplits = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
 
 # --------------------------------------------------------------------------- #
 # Individual pipeline steps
 # --------------------------------------------------------------------------- #
-def load_raw_data() -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
+def load_raw_data() -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
     """Load the raw Fashion-MNIST dataset.
 
     The dataset is downloaded automatically on first use and cached in
@@ -81,9 +78,7 @@ def load_raw_data() -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np
     """
     logger.info("Loading Fashion-MNIST dataset...")
     (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
-    logger.info(
-        "Loaded raw data: train=%s, test=%s", x_train.shape, x_test.shape
-    )
+    logger.info("Loaded raw data: train=%s, test=%s", x_train.shape, x_test.shape)
     return (x_train, y_train), (x_test, y_test)
 
 
@@ -100,15 +95,11 @@ def flatten_images(images: np.ndarray) -> np.ndarray:
         ValueError: If ``images`` is not a 3-dimensional array.
     """
     if images.ndim != 3:
-        raise ValueError(
-            f"Expected images with shape (N, H, W), got {images.shape}."
-        )
+        raise ValueError(f"Expected images with shape (N, H, W), got {images.shape}.")
     return images.reshape(images.shape[0], -1)
 
 
-def normalize_images(
-    images: np.ndarray, dtype: type = np.float32
-) -> np.ndarray:
+def normalize_images(images: np.ndarray, dtype: type = np.float32) -> np.ndarray:
     """Scale pixel values from ``[0, 255]`` to ``[0.0, 1.0]``.
 
     Args:
@@ -126,7 +117,7 @@ def stratified_train_val_split(
     y: np.ndarray,
     val_split: float = DEFAULT_VAL_SPLIT,
     seed: int = DEFAULT_SEED,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Split data into train and validation sets, preserving class proportions.
 
     The split is stratified: every class contributes ``val_split`` of its
@@ -149,9 +140,7 @@ def stratified_train_val_split(
     if not 0.0 < val_split < 1.0:
         raise ValueError(f"val_split must be in (0, 1), got {val_split}.")
     if len(x) != len(y):
-        raise ValueError(
-            f"x and y must have the same length, got {len(x)} and {len(y)}."
-        )
+        raise ValueError(f"x and y must have the same length, got {len(x)} and {len(y)}.")
 
     rng = np.random.default_rng(seed)
 
@@ -174,9 +163,7 @@ def stratified_train_val_split(
     return x[train_idx], y[train_idx], x[val_idx], y[val_idx]
 
 
-def one_hot_encode(
-    labels: np.ndarray, num_classes: int = NUM_CLASSES
-) -> np.ndarray:
+def one_hot_encode(labels: np.ndarray, num_classes: int = NUM_CLASSES) -> np.ndarray:
     """Convert integer class labels to one-hot vectors.
 
     Args:
@@ -194,9 +181,7 @@ def one_hot_encode(
             f"Expected labels with shape (N,), got {labels.shape}. "
             "Labels may already be one-hot encoded."
         )
-    return tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(
-        np.float32
-    )
+    return tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(np.float32)
 
 
 # --------------------------------------------------------------------------- #
@@ -268,9 +253,11 @@ def load_data(
 # --------------------------------------------------------------------------- #
 def _describe(name: str, x: np.ndarray, y: np.ndarray) -> None:
     """Print a short summary of one data split."""
-    print(f"{name:<6} X: {str(x.shape):<14} {x.dtype!s:<8} "
-          f"range=[{x.min():.2f}, {x.max():.2f}] | "
-          f"y: {str(y.shape):<12} {y.dtype}")
+    print(
+        f"{name:<6} X: {str(x.shape):<14} {x.dtype!s:<8} "
+        f"range=[{x.min():.2f}, {x.max():.2f}] | "
+        f"y: {str(y.shape):<12} {y.dtype}"
+    )
 
 
 def _class_counts(y: np.ndarray) -> np.ndarray:
@@ -294,7 +281,7 @@ def main() -> None:
     assert X_val.shape == (9_000, INPUT_DIM)
     assert X_test.shape == (10_000, INPUT_DIM)
     assert X_train.dtype == np.float32
-    assert 0.0 <= X_train.min() and X_train.max() <= 1.0
+    assert X_train.min() >= 0.0 and X_train.max() <= 1.0
     assert len(X_train) + len(X_val) == 60_000
 
     # Stratification check: classes should be equally represented.

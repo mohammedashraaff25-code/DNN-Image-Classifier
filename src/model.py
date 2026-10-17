@@ -25,21 +25,24 @@ from __future__ import annotations
 
 import logging
 import platform
-from typing import Sequence, Tuple
+from collections.abc import Sequence
+from pathlib import Path
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+
+from src.config import BEST_MODEL_PATH
 
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Default architecture (edit these to change the model everywhere)
 # --------------------------------------------------------------------------- #
-DEFAULT_INPUT_SHAPE: Tuple[int, ...] = (784,)
+DEFAULT_INPUT_SHAPE: tuple[int, ...] = (784,)
 DEFAULT_NUM_CLASSES: int = 10
-DEFAULT_HIDDEN_UNITS: Tuple[int, ...] = (512, 256, 128, 64)
-DEFAULT_DROPOUT_RATES: Tuple[float, ...] = (0.3, 0.3, 0.2, 0.2)
+DEFAULT_HIDDEN_UNITS: tuple[int, ...] = (512, 256, 128, 64)
+DEFAULT_DROPOUT_RATES: tuple[float, ...] = (0.3, 0.3, 0.2, 0.2)
 DEFAULT_LEARNING_RATE: float = 1e-3
 
 # Use with integer labels (shape (N,)), as returned by load_data(one_hot=False).
@@ -50,9 +53,7 @@ DEFAULT_LOSS: str = "sparse_categorical_crossentropy"
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def _validate_architecture(
-    hidden_units: Sequence[int], dropout_rates: Sequence[float]
-) -> None:
+def _validate_architecture(hidden_units: Sequence[int], dropout_rates: Sequence[float]) -> None:
     """Check that the architecture arguments are consistent.
 
     Args:
@@ -73,9 +74,7 @@ def _validate_architecture(
     if any(units <= 0 for units in hidden_units):
         raise ValueError(f"All layer sizes must be positive, got {hidden_units}.")
     if any(not 0.0 <= rate < 1.0 for rate in dropout_rates):
-        raise ValueError(
-            f"All dropout rates must be in [0, 1), got {dropout_rates}."
-        )
+        raise ValueError(f"All dropout rates must be in [0, 1), got {dropout_rates}.")
 
 
 def _get_optimizer(learning_rate: float) -> keras.optimizers.Optimizer:
@@ -103,7 +102,7 @@ def _get_optimizer(learning_rate: float) -> keras.optimizers.Optimizer:
 # Model construction
 # --------------------------------------------------------------------------- #
 def build_model(
-    input_shape: Tuple[int, ...] = DEFAULT_INPUT_SHAPE,
+    input_shape: tuple[int, ...] = DEFAULT_INPUT_SHAPE,
     num_classes: int = DEFAULT_NUM_CLASSES,
     hidden_units: Sequence[int] = DEFAULT_HIDDEN_UNITS,
     dropout_rates: Sequence[float] = DEFAULT_DROPOUT_RATES,
@@ -141,7 +140,7 @@ def build_model(
     model.add(keras.Input(shape=input_shape, name="input"))
 
     # Hidden blocks: Dense -> BatchNorm -> ReLU -> Dropout
-    for i, (units, rate) in enumerate(zip(hidden_units, dropout_rates), start=1):
+    for i, (units, rate) in enumerate(zip(hidden_units, dropout_rates, strict=True), start=1):
         model.add(
             layers.Dense(
                 units,
@@ -163,9 +162,7 @@ def build_model(
         metrics=["accuracy"],
     )
 
-    logger.info(
-        "Built model '%s' with %s parameters.", name, f"{model.count_params():,}"
-    )
+    logger.info("Built model '%s' with %s parameters.", name, f"{model.count_params():,}")
     return model
 
 
@@ -182,6 +179,26 @@ def print_model_summary(model: keras.Model) -> None:
     print(f"\nTrainable parameters    : {trainable:,}")
     print(f"Non-trainable parameters: {non_trainable:,} (BatchNorm statistics)")
     print(f"Total parameters        : {trainable + non_trainable:,}")
+
+
+def load_best_model(model_path: Path = BEST_MODEL_PATH) -> keras.Model:
+    """Load the trained model saved by ``src.train``.
+
+    Args:
+        model_path: Path to the ``.keras`` model file.
+
+    Returns:
+        The loaded Keras model.
+
+    Raises:
+        FileNotFoundError: If the model file does not exist (train first).
+    """
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"No trained model found at {model_path}. Run `python -m src.train` first."
+        )
+    logger.info("Loading model from %s", model_path)
+    return keras.models.load_model(model_path)
 
 
 # --------------------------------------------------------------------------- #

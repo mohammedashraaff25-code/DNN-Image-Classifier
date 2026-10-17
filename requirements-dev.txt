@@ -1,0 +1,6 @@
+# Development tools: tests, linting, formatting.
+-r requirements.txt
+
+pytest==8.2.0
+black==24.4.2
+ruff==0.4.4

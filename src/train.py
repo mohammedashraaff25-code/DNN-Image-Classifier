@@ -23,40 +23,31 @@ no matter which directory it is launched from.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
-import random
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from tensorflow import keras
 
-matplotlib.use("Agg")  # headless backend: figures are saved, never shown
-
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import seaborn as sns  # noqa: E402
-import tensorflow as tf  # noqa: E402
-from tensorflow import keras  # noqa: E402
-
-from src.data_loader import load_data  # noqa: E402
-from src.model import build_model, print_model_summary  # noqa: E402
+from src.config import BEST_MODEL_PATH, FIGURES_DIR, PROJECT_ROOT, REPORTS_DIR
+from src.data_loader import load_data
+from src.model import build_model, print_model_summary
+from src.utils import save_figure, set_seed
 
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
-# Paths (relative to the project root, not to the current working directory)
+# Output file names (folders live in src.config)
 # --------------------------------------------------------------------------- #
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
-MODELS_DIR: Path = PROJECT_ROOT / "models"
-REPORTS_DIR: Path = PROJECT_ROOT / "reports"
-FIGURES_DIR: Path = REPORTS_DIR / "figures"
-
-BEST_MODEL_PATH: Path = MODELS_DIR / "best_model.keras"
-HISTORY_PATH: Path = REPORTS_DIR / "training_history.csv"
-CURVES_PATH: Path = FIGURES_DIR / "07_training_curves.png"
+HISTORY_NAME = "training_history.csv"
+CONFIG_NAME = "training_config.json"
+CURVES_NAME = "07_training_curves.png"
 
 
 # --------------------------------------------------------------------------- #
@@ -92,20 +83,7 @@ class TrainConfig:
 # --------------------------------------------------------------------------- #
 # Building blocks
 # --------------------------------------------------------------------------- #
-def set_seed(seed: int) -> None:
-    """Seed Python, NumPy and TensorFlow for reproducible runs.
-
-    Args:
-        seed: The seed value.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-
-
-def create_callbacks(
-    config: TrainConfig, checkpoint_path: Path = BEST_MODEL_PATH
-) -> List[keras.callbacks.Callback]:
+def create_callbacks(config: TrainConfig, checkpoint_path: Path) -> list[keras.callbacks.Callback]:
     """Create the callbacks used to prevent overfitting.
 
     * **EarlyStopping** stops training when ``val_loss`` stops improving and
@@ -149,7 +127,21 @@ def create_callbacks(
     ]
 
 
-def save_history(history: Dict[str, List[float]], path: Path = HISTORY_PATH) -> None:
+def save_config(config: TrainConfig, path: Path) -> None:
+    """Save the hyperparameters of a run to a JSON file.
+
+    Keeping the exact settings next to the results makes every run reproducible.
+
+    Args:
+        config: Training configuration.
+        path: Destination JSON path.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(asdict(config), indent=2))
+    logger.info("Saved training configuration to %s", path)
+
+
+def save_history(history: dict[str, list[float]], path: Path) -> None:
     """Save the per-epoch training history to a CSV file.
 
     Args:
@@ -163,9 +155,7 @@ def save_history(history: Dict[str, List[float]], path: Path = HISTORY_PATH) -> 
     logger.info("Saved training history to %s", path)
 
 
-def plot_training_curves(
-    history: Dict[str, List[float]], save_path: Path = CURVES_PATH
-) -> None:
+def plot_training_curves(history: dict[str, list[float]], save_path: Path) -> None:
     """Plot and save loss, accuracy (and learning rate) curves.
 
     Train and validation curves are drawn together so overfitting shows up as
@@ -175,56 +165,56 @@ def plot_training_curves(
         history: ``History.history`` dictionary returned by ``model.fit``.
         save_path: Destination image path.
     """
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
     epochs = np.arange(1, len(history["loss"]) + 1)
     best_epoch = int(np.argmin(history["val_loss"])) + 1
 
     # The LR key is "lr" in Keras 2 and "learning_rate" in Keras 3.
-    lr_key = next((k for k in ("lr", "learning_rate") if k in history), None)
+    lr_key = next((key for key in ("lr", "learning_rate") if key in history), None)
     n_panels = 3 if lr_key else 2
 
-    sns.set_theme(style="whitegrid", context="notebook")
-    train_color, val_color = sns.color_palette("deep")[0], sns.color_palette("deep")[3]
-    fig, axes = plt.subplots(1, n_panels, figsize=(6.2 * n_panels, 4.8))
+    palette = sns.color_palette("deep")
+    train_color, val_color, lr_color = palette[0], palette[3], palette[2]
+    metric_panels = [("loss", "Loss"), ("accuracy", "Accuracy")]
 
-    panels = [
-        ("loss", "Loss", "Loss curves"),
-        ("accuracy", "Accuracy", "Accuracy curves"),
-    ]
-    for ax, (metric, ylabel, title) in zip(axes, panels):
-        ax.plot(epochs, history[metric], color=train_color, linewidth=2, label="Train")
-        ax.plot(
-            epochs, history[f"val_{metric}"], color=val_color, linewidth=2, label="Validation"
-        )
-        ax.axvline(
-            best_epoch, color="gray", linestyle="--", linewidth=1.2,
-            label=f"Best epoch ({best_epoch})",
-        )
-        ax.set_title(f"{title}: Train vs Validation", fontweight="bold")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel(ylabel)
-        ax.legend()
+    # Scoped style: does not change the global matplotlib/seaborn settings.
+    with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
+        fig, axes = plt.subplots(1, n_panels, figsize=(6.2 * n_panels, 4.8))
 
-    if lr_key:
-        ax = axes[2]
-        ax.plot(epochs, history[lr_key], color=sns.color_palette("deep")[2], linewidth=2)
-        ax.set_yscale("log")
-        ax.set_title("Learning rate schedule", fontweight="bold")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Learning rate (log)")
+        for ax, (metric, label) in zip(axes[:2], metric_panels, strict=True):
+            ax.plot(epochs, history[metric], color=train_color, linewidth=2, label="Train")
+            ax.plot(
+                epochs, history[f"val_{metric}"], color=val_color, linewidth=2, label="Validation"
+            )
+            ax.axvline(
+                best_epoch,
+                color="gray",
+                linestyle="--",
+                linewidth=1.2,
+                label=f"Best epoch ({best_epoch})",
+            )
+            ax.set_title(f"{label} curves: Train vs Validation", fontweight="bold")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel(label)
+            ax.legend()
 
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved training curves to %s", save_path)
+        if lr_key:
+            lr_ax = axes[2]
+            lr_ax.plot(epochs, history[lr_key], color=lr_color, linewidth=2)
+            lr_ax.set_yscale("log")
+            lr_ax.set_title("Learning rate schedule", fontweight="bold")
+            lr_ax.set_xlabel("Epoch")
+            lr_ax.set_ylabel("Learning rate (log)")
+
+        fig.tight_layout()
+
+    save_figure(fig, save_path)
 
 
 def evaluate_best_model(
     model_path: Path,
-    splits: Dict[str, Tuple[np.ndarray, np.ndarray]],
+    splits: dict[str, tuple[np.ndarray, np.ndarray]],
     batch_size: int,
-) -> Dict[str, Dict[str, float]]:
+) -> dict[str, dict[str, float]]:
     """Reload the best saved model and evaluate it on every split.
 
     Reloading from disk (instead of using the in-memory model) guarantees we
@@ -239,7 +229,7 @@ def evaluate_best_model(
         Mapping ``{name: {"loss": ..., "accuracy": ...}}``.
     """
     best_model = keras.models.load_model(model_path)
-    results: Dict[str, Dict[str, float]] = {}
+    results: dict[str, dict[str, float]] = {}
     for name, (x, y) in splits.items():
         loss, accuracy = best_model.evaluate(x, y, batch_size=batch_size, verbose=0)
         results[name] = {"loss": float(loss), "accuracy": float(accuracy)}
@@ -247,9 +237,10 @@ def evaluate_best_model(
 
 
 def print_final_report(
-    history: Dict[str, List[float]],
-    results: Dict[str, Dict[str, float]],
+    history: dict[str, list[float]],
+    results: dict[str, dict[str, float]],
     elapsed_seconds: float,
+    saved_paths: dict[str, Path],
 ) -> None:
     """Print a readable end-of-training report.
 
@@ -257,6 +248,8 @@ def print_final_report(
         history: ``History.history`` dictionary returned by ``model.fit``.
         results: Output of :func:`evaluate_best_model`.
         elapsed_seconds: Total training time.
+        saved_paths: Mapping ``{"model": ..., "history": ..., "curves": ...}``
+            of the files written by the run.
     """
     best_idx = int(np.argmin(history["val_loss"]))
     train_acc = history["accuracy"][best_idx]
@@ -268,37 +261,47 @@ def print_final_report(
     print(f"Epochs run            : {len(history['loss'])}")
     print(f"Best epoch            : {best_idx + 1}")
     print(f"Training time         : {elapsed_seconds / 60:.1f} min")
-    print(f"\nAt best epoch:")
+    print("\nAt best epoch:")
     print(f"  Train accuracy      : {train_acc:.4f}")
     print(f"  Validation accuracy : {val_acc:.4f}")
     print(f"  Overfitting gap     : {gap:+.4f} (train - val)")
-    print(f"\nBest model (reloaded from {BEST_MODEL_PATH.name}):")
+    print(f"\nBest model (reloaded from {saved_paths['model'].name}):")
     for name, metrics in results.items():
         print(
             f"  {name.capitalize():<11} loss={metrics['loss']:.4f}  "
             f"accuracy={metrics['accuracy']:.4f}"
         )
-    print(f"\nSaved model   : {BEST_MODEL_PATH}")
-    print(f"Saved history : {HISTORY_PATH}")
-    print(f"Saved curves  : {CURVES_PATH}")
+    print(f"\nSaved model   : {saved_paths['model']}")
+    print(f"Saved history : {saved_paths['history']}")
+    print(f"Saved curves  : {saved_paths['curves']}")
     print(line)
 
 
 # --------------------------------------------------------------------------- #
 # Main pipeline
 # --------------------------------------------------------------------------- #
-def run_training(config: TrainConfig) -> Dict[str, List[float]]:
+def run_training(config: TrainConfig, output_root: Path = PROJECT_ROOT) -> dict[str, list[float]]:
     """Run the full training pipeline.
 
     Args:
         config: Training configuration.
+        output_root: Folder under which ``models/`` and ``reports/`` are written.
+            Defaults to the project root; tests pass a temporary folder.
 
     Returns:
         The Keras training history dictionary.
     """
+    paths = {
+        "model": output_root / BEST_MODEL_PATH.relative_to(PROJECT_ROOT),
+        "history": output_root / REPORTS_DIR.relative_to(PROJECT_ROOT) / HISTORY_NAME,
+        "config": output_root / REPORTS_DIR.relative_to(PROJECT_ROOT) / CONFIG_NAME,
+        "curves": output_root / FIGURES_DIR.relative_to(PROJECT_ROOT) / CURVES_NAME,
+    }
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
     set_seed(config.seed)
-    for directory in (MODELS_DIR, REPORTS_DIR, FIGURES_DIR):
-        directory.mkdir(parents=True, exist_ok=True)
+    save_config(config, paths["config"])
 
     # 1) Data -------------------------------------------------------------- #
     print("\n[1/5] Loading data...")
@@ -325,7 +328,7 @@ def run_training(config: TrainConfig) -> Dict[str, List[float]]:
         validation_data=(X_val, y_val),
         epochs=config.epochs,
         batch_size=config.batch_size,
-        callbacks=create_callbacks(config),
+        callbacks=create_callbacks(config, paths["model"]),
         shuffle=True,
         verbose=2,  # one line per epoch
     )
@@ -333,13 +336,13 @@ def run_training(config: TrainConfig) -> Dict[str, List[float]]:
 
     # 4) Save history + plots --------------------------------------------- #
     print("\n[4/5] Saving history and plots...")
-    save_history(history.history)
-    plot_training_curves(history.history)
+    save_history(history.history, paths["history"])
+    plot_training_curves(history.history, paths["curves"])
 
     # 5) Evaluate the best saved model ------------------------------------ #
     print("\n[5/5] Evaluating best model...")
     results = evaluate_best_model(
-        BEST_MODEL_PATH,
+        paths["model"],
         {
             "train": (X_train, y_train),
             "validation": (X_val, y_val),
@@ -347,7 +350,7 @@ def run_training(config: TrainConfig) -> Dict[str, List[float]]:
         },
         batch_size=config.batch_size,
     )
-    print_final_report(history.history, results, elapsed)
+    print_final_report(history.history, results, elapsed, paths)
 
     return history.history
 
@@ -359,16 +362,16 @@ def parse_args() -> TrainConfig:
         The training configuration.
     """
     defaults = TrainConfig()
-    parser = argparse.ArgumentParser(
-        description="Train the Fashion-MNIST fully connected DNN."
-    )
+    parser = argparse.ArgumentParser(description="Train the Fashion-MNIST fully connected DNN.")
     parser.add_argument("--epochs", type=int, default=defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=defaults.batch_size)
     parser.add_argument("--learning-rate", type=float, default=defaults.learning_rate)
     parser.add_argument("--val-split", type=float, default=defaults.val_split)
     parser.add_argument("--seed", type=int, default=defaults.seed)
     parser.add_argument(
-        "--patience", type=int, default=defaults.es_patience,
+        "--patience",
+        type=int,
+        default=defaults.es_patience,
         help="EarlyStopping patience (epochs).",
     )
     args = parser.parse_args()
@@ -386,6 +389,7 @@ def parse_args() -> TrainConfig:
 def main() -> None:
     """Entry point: parse arguments and run training."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+    plt.switch_backend("Agg")  # headless: figures are saved, never shown
     run_training(parse_args())
 
 

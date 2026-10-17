@@ -27,56 +27,30 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from tensorflow import keras
 
-matplotlib.use("Agg")  # headless backend: figures are saved, never shown
-
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import seaborn as sns  # noqa: E402
-from tensorflow import keras  # noqa: E402
-
-from src.data_loader import CLASS_NAMES, IMG_HEIGHT, IMG_WIDTH, load_data  # noqa: E402
+from src.config import BEST_MODEL_PATH, FIGURES_DIR
+from src.data_loader import CLASS_NAMES, IMG_HEIGHT, IMG_WIDTH, load_data
+from src.model import load_best_model
+from src.utils import save_figure, with_plot_style
 
 logger = logging.getLogger(__name__)
 
-# --------------------------------------------------------------------------- #
-# Paths (relative to the project root, not to the current working directory)
-# --------------------------------------------------------------------------- #
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
-BEST_MODEL_PATH: Path = PROJECT_ROOT / "models" / "best_model.keras"
-PREDICTIONS_FIG_PATH: Path = PROJECT_ROOT / "reports" / "figures" / "12_predictions.png"
+# Output path (shared locations live in src.config)
+PREDICTIONS_FIG_PATH: Path = FIGURES_DIR / "12_predictions.png"
 
 # Type alias: list of (class_name, probability)
-Prediction = Tuple[str, float]
+Prediction = tuple[str, float]
 
 
 # --------------------------------------------------------------------------- #
 # Model and image handling
 # --------------------------------------------------------------------------- #
-def load_best_model(model_path: Path = BEST_MODEL_PATH) -> keras.Model:
-    """Load the trained model from disk.
-
-    Args:
-        model_path: Path to the ``.keras`` model file.
-
-    Returns:
-        The loaded Keras model.
-
-    Raises:
-        FileNotFoundError: If the model file does not exist (train first).
-    """
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"No trained model found at {model_path}. "
-            "Run `python -m src.train` first."
-        )
-    return keras.models.load_model(model_path)
-
-
 def load_image(image_path: Path, invert: str = "auto") -> np.ndarray:
     """Load an image file and convert it to the Fashion-MNIST format.
 
@@ -142,7 +116,7 @@ def predict_probabilities(model: keras.Model, images: np.ndarray) -> np.ndarray:
     return model.predict(flat, verbose=0)
 
 
-def top_k_predictions(probabilities: np.ndarray, k: int = 3) -> List[Prediction]:
+def top_k_predictions(probabilities: np.ndarray, k: int = 3) -> list[Prediction]:
     """Return the ``k`` most likely classes for one probability vector.
 
     Args:
@@ -158,7 +132,7 @@ def top_k_predictions(probabilities: np.ndarray, k: int = 3) -> List[Prediction]
 
 def predict_image(
     model: keras.Model, image_path: Path, top_k: int = 3, invert: str = "auto"
-) -> List[Prediction]:
+) -> list[Prediction]:
     """Classify a single image file.
 
     Args:
@@ -178,12 +152,13 @@ def predict_image(
 # --------------------------------------------------------------------------- #
 # Plotting
 # --------------------------------------------------------------------------- #
+@with_plot_style("white")
 def plot_predictions(
     images: np.ndarray,
     probabilities: np.ndarray,
     save_path: Path,
-    true_labels: Optional[np.ndarray] = None,
-    names: Optional[Sequence[str]] = None,
+    true_labels: np.ndarray | None = None,
+    names: Sequence[str] | None = None,
 ) -> None:
     """Plot a grid of images with their predicted class and confidence.
 
@@ -201,8 +176,6 @@ def plot_predictions(
     n_cols = min(5, n_images)
     n_rows = int(np.ceil(n_images / n_cols))
 
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    sns.set_theme(style="white")
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.8 * n_cols, 3.3 * n_rows))
     axes = np.atleast_1d(axes).ravel()
 
@@ -227,15 +200,13 @@ def plot_predictions(
 
     fig.suptitle("Model predictions", fontsize=14, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved %s", save_path)
+    save_figure(fig, save_path)
 
 
 # --------------------------------------------------------------------------- #
 # Command line interface
 # --------------------------------------------------------------------------- #
-def _print_predictions(label: str, predictions: List[Prediction]) -> None:
+def _print_predictions(label: str, predictions: list[Prediction]) -> None:
     """Print the top-k predictions of one image in a compact format."""
     print(f"\n{label}")
     for rank, (name, probability) in enumerate(predictions, start=1):
@@ -252,16 +223,22 @@ def parse_args() -> argparse.Namespace:
         description="Classify clothing images with the trained Fashion-MNIST DNN."
     )
     parser.add_argument(
-        "--image", type=Path, nargs="+",
+        "--image",
+        type=Path,
+        nargs="+",
         help="One or more image files to classify.",
     )
     parser.add_argument(
-        "--test-samples", type=int, default=10,
+        "--test-samples",
+        type=int,
+        default=10,
         help="Number of random test images to classify when --image is not given.",
     )
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument(
-        "--invert", choices=["auto", "yes", "no"], default="auto",
+        "--invert",
+        choices=["auto", "yes", "no"],
+        default="auto",
         help="Invert colors of custom images (light item on dark background).",
     )
     parser.add_argument("--model-path", type=Path, default=BEST_MODEL_PATH)
@@ -273,6 +250,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: classify custom images or random test samples."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+    plt.switch_backend("Agg")  # headless: figures are saved, never shown
     args = parse_args()
     model = load_best_model(args.model_path)
 
@@ -282,7 +260,7 @@ def main() -> None:
         probabilities = predict_probabilities(model, images)
         names = [path.name for path in args.image]
 
-        for name, probs in zip(names, probabilities):
+        for name, probs in zip(names, probabilities, strict=True):
             _print_predictions(name, top_k_predictions(probs, args.top_k))
         plot_predictions(images, probabilities, args.save_path, names=names)
 

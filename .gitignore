@@ -8,7 +8,6 @@ build/
 dist/
 *.egg-info/
 .eggs/
-pip-wheel-metadata/
 
 # ---------- Virtual environments ----------
 venv/
@@ -20,32 +19,22 @@ ENV/
 .ipynb_checkpoints/
 */.ipynb_checkpoints/
 
-# ---------- Data (large files) ----------
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
-# ---------- Models & checkpoints ----------
+# ---------- Trained models (re-create with `make train`) ----------
 models/*
 !models/.gitkeep
-*.h5
 *.keras
+*.h5
 *.ckpt
 *.pb
 *.pkl
 
-# ---------- Logs & TensorBoard ----------
+# ---------- Logs ----------
 logs/
 *.log
 runs/
 tensorboard_logs/
 
-# ---------- Reports ----------
-reports/figures/*
-!reports/figures/.gitkeep
-
-# ---------- Testing & coverage ----------
+# ---------- Testing, coverage and linters ----------
 .pytest_cache/
 .coverage
 htmlcov/

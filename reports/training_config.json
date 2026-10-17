@@ -1,0 +1,11 @@
+{
+  "epochs": 100,
+  "batch_size": 128,
+  "learning_rate": 0.001,
+  "val_split": 0.15,
+  "seed": 42,
+  "es_patience": 12,
+  "lr_patience": 5,
+  "lr_factor": 0.5,
+  "min_lr": 1e-06
+}

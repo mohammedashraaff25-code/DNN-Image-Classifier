@@ -176,7 +176,7 @@ Loss and accuracy for train vs. validation, with the best epoch marked and the l
 
 ### Confusion matrix
 
-Each row shows how the images of one true class were classified (values are shares of that class). Errors concentrate on classes that genuinely look alike, mainly the upper-body garments (Shirt, T-shirt/top, Pullover, Coat).
+Each row shows how the images of one true class were classified (values are shares of that class). Errors concentrate on classes that genuinely look alike, all of them upper-body garments. The five most frequent confusions are Shirt → T-shirt/top (109 images), Coat → Pullover (101), Shirt → Pullover (98), T-shirt/top → Shirt (94), and Shirt → Coat (82).
 
 <p align="center">
   <img src="reports/figures/09_confusion_matrix_normalized.png" alt="Normalized confusion matrix on the test set" width="75%">
@@ -187,6 +187,8 @@ Each row shows how the images of one true class were classified (values are shar
 <p align="center">
   <img src="reports/figures/10_per_class_metrics.png" alt="Per-class precision, recall and F1-score" width="90%">
 </p>
+
+Trouser (F1 0.98), Bag (0.98), Sandal (0.97), Ankle boot (0.96), and Sneaker (0.95) are classified almost perfectly. **Shirt is the hardest class** (F1 0.72, recall 66.7%), followed by Coat (0.82), Pullover (0.82), and T-shirt/top (0.85). Macro-averaged F1 is 0.894.
 
 The model's most confident mistakes are often ambiguous even to a human eye:
 
